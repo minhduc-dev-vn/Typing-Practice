@@ -11,6 +11,10 @@ import { KeySoundPlayer } from "@/lib/audio/key-sound";
 import { createGeneratedPracticeText, createPracticeText } from "@/lib/content";
 import { savePracticeSession } from "@/lib/history/client";
 import { CountdownTimer } from "@/lib/typing-engine/countdown";
+import {
+  findActiveTypingLine,
+  splitTypingDisplayLines
+} from "@/lib/typing-engine/display-lines";
 import { TypingEngine } from "@/lib/typing-engine/engine";
 import {
   VietnameseComposer,
@@ -56,6 +60,9 @@ export function TypingScreen() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const characterRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const typingLineRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const lineProgressRef = useRef<HTMLSpanElement>(null);
+  const activeTypingLineRef = useRef(-1);
   const engineRef = useRef<TypingEngine | null>(null);
   const timerRef = useRef<CountdownTimer | null>(null);
   const startedAtRef = useRef<number | null>(null);
@@ -67,7 +74,43 @@ export function TypingScreen() {
     () => generatedText ?? createPracticeText(mode, language, timeLimit, sessionSeed),
     [generatedText, language, mode, sessionSeed, timeLimit]
   );
-  const targetCharacters = useMemo(() => Array.from(targetText), [targetText]);
+  const targetCharacters = useMemo(() => Array.from(targetText.normalize("NFC")), [targetText]);
+  const typingLines = useMemo(() => splitTypingDisplayLines(targetText), [targetText]);
+
+  const syncTypingLine = useCallback((currentIndex: number, force = false) => {
+    const activeLine = findActiveTypingLine(typingLines, currentIndex);
+    if (!force && activeTypingLineRef.current === activeLine) {
+      return;
+    }
+
+    activeTypingLineRef.current = activeLine;
+    typingLineRefs.current.forEach((element, index) => {
+      if (!element) {
+        return;
+      }
+
+      element.classList.remove(
+        "typing-line-active",
+        "typing-line-preview",
+        "typing-line-previous",
+        "typing-line-hidden"
+      );
+      if (index === activeLine) {
+        element.classList.add("typing-line-active");
+      } else if (index === activeLine + 1) {
+        element.classList.add("typing-line-preview");
+      } else if (index < activeLine) {
+        element.classList.add("typing-line-previous");
+      } else {
+        element.classList.add("typing-line-hidden");
+      }
+      element.setAttribute("aria-hidden", String(index !== activeLine));
+    });
+
+    if (lineProgressRef.current) {
+      lineProgressRef.current.textContent = `Line ${activeLine + 1} / ${typingLines.length}`;
+    }
+  }, [typingLines]);
 
   const stopTimer = useCallback(() => {
     timerRef.current?.stop();
@@ -127,17 +170,20 @@ export function TypingScreen() {
     startedAtRef.current = null;
     composerRef.current.reset();
     characterRefs.current = characterRefs.current.slice(0, targetCharacters.length);
+    typingLineRefs.current = typingLineRefs.current.slice(0, typingLines.length);
+    activeTypingLineRef.current = -1;
 
     const engine = new TypingEngine(targetText);
     engine.attachElements(characterRefs.current);
     engineRef.current = engine;
+    syncTypingLine(0, true);
 
     const focusFrame = requestAnimationFrame(() => containerRef.current?.focus());
     return () => {
       cancelAnimationFrame(focusFrame);
       stopTimer();
     };
-  }, [sessionSeed, stopTimer, targetCharacters.length, targetText]);
+  }, [sessionSeed, stopTimer, syncTypingLine, targetCharacters.length, targetText, typingLines.length]);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("typing-theme");
@@ -217,6 +263,7 @@ export function TypingScreen() {
     }
 
     event.preventDefault();
+    syncTypingLine(engine.getSnapshot().currentIndex);
     keySoundRef.current?.play(event.key === "Backspace" ? "backspace" : "key");
     if (completed) {
       const elapsedMs = startedAtRef.current === null
@@ -224,7 +271,7 @@ export function TypingScreen() {
         : performance.now() - startedAtRef.current;
       completeSession(elapsedMs);
     }
-  }, [applyCompositionChange, beginSession, completeSession, finalResult, language]);
+  }, [applyCompositionChange, beginSession, completeSession, finalResult, language, syncTypingLine]);
 
   const prepareNewSession = useCallback(() => {
     historySaveTokenRef.current += 1;
@@ -420,23 +467,50 @@ export function TypingScreen() {
           ref={containerRef}
           tabIndex={0}
           role="textbox"
-          aria-label="Typing practice text. Start typing to begin the timer."
+          aria-label="Typing practice text with a preview of the next line. Start typing to begin the timer."
           aria-multiline="true"
           onKeyDown={handleKeyDown}
           onClick={() => containerRef.current?.focus()}
         >
-          {targetCharacters.map((character, index) => (
-            <span
-              className="typing-character char-pending"
-              data-index={index}
-              key={`${sessionSeed}-${index}`}
-              ref={(element) => {
-                characterRefs.current[index] = element;
-              }}
-            >
-              {character}
-            </span>
-          ))}
+          <div className="typing-area-meta" aria-hidden="true">
+            <span>Current line</span>
+            <span ref={lineProgressRef}>Line 1 / {typingLines.length}</span>
+          </div>
+          <div className="typing-lines">
+            {typingLines.map((line, lineIndex) => (
+              <div
+                aria-hidden={lineIndex !== 0}
+                className={lineIndex === 0
+                  ? "typing-line typing-line-active"
+                  : lineIndex === 1
+                    ? "typing-line typing-line-preview"
+                    : "typing-line typing-line-hidden"}
+                data-line-index={lineIndex}
+                key={`${sessionSeed}-line-${line.start}`}
+                ref={(element) => {
+                  typingLineRefs.current[lineIndex] = element;
+                }}
+              >
+                {targetCharacters.slice(line.start, line.end).map((character, offset) => {
+                  const index = line.start + offset;
+                  return (
+                    <span
+                      className={character === "\n"
+                        ? "typing-character typing-character-newline char-pending"
+                        : "typing-character char-pending"}
+                      data-index={index}
+                      key={`${sessionSeed}-${index}`}
+                      ref={(element) => {
+                        characterRefs.current[index] = element;
+                      }}
+                    >
+                      {character === "\n" ? "↵" : character}
+                    </span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
 
         <VirtualKeyboard />

@@ -6,6 +6,7 @@ interface AudioBufferPort {
 
 interface AudioBufferSourcePort {
   buffer: AudioBufferPort | null;
+  playbackRate: { value: number };
   connect: (target: unknown) => void;
   start: () => void;
 }
@@ -22,16 +23,23 @@ export interface KeySoundAudioContext {
   createBuffer: (channels: number, length: number, sampleRate: number) => AudioBufferPort;
   createBufferSource: () => AudioBufferSourcePort;
   createGain: () => GainPort;
+  decodeAudioData: (audioData: ArrayBuffer) => Promise<AudioBufferPort>;
   resume: () => Promise<void>;
   close: () => Promise<void>;
 }
 
 export type KeySoundAudioContextFactory = () => KeySoundAudioContext;
+export type KeySoundSampleLoader = () => Promise<ArrayBuffer>;
 
 const OUTPUT_VOLUME = 0.22;
+const SAMPLE_PATH = "/audio/mechanical-key.mp3";
 const VARIANT_COUNTS: Record<KeySoundKind, number> = {
   key: 7,
   backspace: 4
+};
+const SAMPLE_PLAYBACK_RATES: Record<KeySoundKind, number[]> = {
+  key: [0.97, 1.015, 0.99, 1.035, 0.955, 1.005, 1.025],
+  backspace: [0.82, 0.86, 0.79, 0.84]
 };
 
 function defaultContextFactory(): KeySoundAudioContext {
@@ -41,6 +49,14 @@ function defaultContextFactory(): KeySoundAudioContext {
     throw new Error("Web Audio is not supported in this browser.");
   }
   return new AudioContextConstructor() as unknown as KeySoundAudioContext;
+}
+
+async function defaultSampleLoader(): Promise<ArrayBuffer> {
+  const response = await fetch(SAMPLE_PATH);
+  if (!response.ok) {
+    throw new Error(`Unable to load keyboard sound (${response.status}).`);
+  }
+  return response.arrayBuffer();
 }
 
 function nextNoise(seed: number): { seed: number; value: number } {
@@ -146,13 +162,54 @@ export class KeySoundPlayer {
   private disposed = false;
   private context: KeySoundAudioContext | null = null;
   private output: GainPort | null = null;
+  private sampleBuffer: AudioBufferPort | null = null;
+  private samplePromise: Promise<boolean> | null = null;
+  private sampleFailed = false;
   private buffers: Partial<Record<KeySoundKind, Array<AudioBufferPort | undefined>>> = {};
   private variantCursors: Record<KeySoundKind, number> = { key: 0, backspace: 0 };
 
-  constructor(private readonly contextFactory: KeySoundAudioContextFactory = defaultContextFactory) {}
+  constructor(
+    private readonly contextFactory: KeySoundAudioContextFactory = defaultContextFactory,
+    private readonly sampleLoader: KeySoundSampleLoader = defaultSampleLoader
+  ) {}
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    if (enabled) {
+      void this.preload();
+    }
+  }
+
+  preload(): Promise<boolean> {
+    if (this.sampleBuffer) {
+      return Promise.resolve(true);
+    }
+    if (this.disposed || this.sampleFailed) {
+      return Promise.resolve(false);
+    }
+    if (this.samplePromise) {
+      return this.samplePromise;
+    }
+
+    const context = this.getContext();
+    if (!context || context.state === "closed") {
+      return Promise.resolve(false);
+    }
+
+    this.samplePromise = this.sampleLoader()
+      .then((audioData) => context.decodeAudioData(audioData.slice(0)))
+      .then((buffer) => {
+        if (this.disposed) {
+          return false;
+        }
+        this.sampleBuffer = buffer;
+        return true;
+      })
+      .catch(() => {
+        this.sampleFailed = true;
+        return false;
+      });
+    return this.samplePromise;
   }
 
   play(kind: KeySoundKind): void {
@@ -178,6 +235,8 @@ export class KeySoundPlayer {
   dispose(): void {
     this.disposed = true;
     this.buffers = {};
+    this.sampleBuffer = null;
+    this.samplePromise = null;
     this.output = null;
     const context = this.context;
     this.context = null;
@@ -204,10 +263,11 @@ export class KeySoundPlayer {
     }
   }
 
-  private getBuffer(context: KeySoundAudioContext, kind: KeySoundKind): AudioBufferPort {
-    const variantCount = VARIANT_COUNTS[kind];
-    const variant = this.variantCursors[kind];
-    this.variantCursors[kind] = (variant + 3) % variantCount;
+  private getBuffer(
+    context: KeySoundAudioContext,
+    kind: KeySoundKind,
+    variant: number
+  ): AudioBufferPort {
     const pool = this.buffers[kind] ?? [];
     this.buffers[kind] = pool;
     const cached = pool[variant];
@@ -228,8 +288,14 @@ export class KeySoundPlayer {
     }
 
     try {
+      const variantCount = VARIANT_COUNTS[kind];
+      const variant = this.variantCursors[kind];
+      this.variantCursors[kind] = (variant + 3) % variantCount;
       const source = context.createBufferSource();
-      source.buffer = this.getBuffer(context, kind);
+      source.buffer = this.sampleBuffer ?? this.getBuffer(context, kind, variant);
+      source.playbackRate.value = this.sampleBuffer
+        ? SAMPLE_PLAYBACK_RATES[kind][variant]
+        : 1;
       source.connect(this.output);
       source.start();
     } catch {

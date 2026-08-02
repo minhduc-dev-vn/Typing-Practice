@@ -6,7 +6,7 @@
 
 Phase 4 hoàn tất roadmap hiện tại: engine luyện gõ chạy hoàn toàn ở client, nội dung tĩnh và AI, tài khoản Supabase email/password tùy chọn, lịch sử/dashboard và gợi ý Daily Practice theo lịch sử 7 ngày. Guest vẫn luyện gõ và generate bình thường; banner cá nhân hóa chỉ được tải sau khi xác thực tài khoản.
 
-Âm thanh gõ phím là tùy chọn cục bộ: bật nút `Muted` trên header để nghe âm bàn phím cơ tổng hợp độ trễ thấp. Âm thanh kết hợp switch click, bottom-out, cộng hưởng keycap/case và stabilizer trầm hơn cho Backspace; một pool biến thể giúp các lần gõ không lặp máy móc. Lựa chọn được lưu trong `localStorage`, không tải audio bên ngoài và không tham gia vào vòng lặp của typing engine.
+Âm thanh gõ phím là tùy chọn cục bộ: bật nút `Muted` trên header để nghe mẫu thu bàn phím cơ được đóng gói cùng ứng dụng. Tốc độ phát thay đổi nhẹ giữa các lần gõ và được hạ thấp cho Backspace để tránh cảm giác lặp máy móc. Nếu trình duyệt không tải hoặc giải mã được MP3, ứng dụng tự chuyển sang âm tổng hợp cục bộ. Lựa chọn được lưu trong `localStorage`, không tải audio từ dịch vụ bên ngoài và không tham gia vào vòng lặp của typing engine.
 
 ## Chạy local
 

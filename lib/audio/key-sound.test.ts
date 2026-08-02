@@ -9,6 +9,9 @@ import {
 interface FakeContext extends KeySoundAudioContext {
   started: number;
   createdBuffers: number;
+  playedBuffers: Array<ReturnType<KeySoundAudioContext["createBuffer"]> | null>;
+  playbackRates: number[];
+  decodeAudioData: ReturnType<typeof vi.fn<(audioData: ArrayBuffer) => Promise<ReturnType<KeySoundAudioContext["createBuffer"]>>>>;
   resume: ReturnType<typeof vi.fn<() => Promise<void>>>;
   close: ReturnType<typeof vi.fn<() => Promise<void>>>;
 }
@@ -20,19 +23,33 @@ function createFakeContext(initialState: "running" | "suspended" = "running"): F
     destination: {},
     started: 0,
     createdBuffers: 0,
+    playedBuffers: [],
+    playbackRates: [],
     createBuffer: (_channels, length) => {
       context.createdBuffers += 1;
       const channel = new Float32Array(length);
       return { getChannelData: () => channel };
     },
-    createBufferSource: () => ({
-      buffer: null,
-      connect: () => undefined,
-      start: () => { context.started += 1; }
-    }),
+    createBufferSource: () => {
+      const source = {
+        buffer: null as ReturnType<KeySoundAudioContext["createBuffer"]> | null,
+        playbackRate: { value: 1 },
+        connect: () => undefined,
+        start: () => {
+          context.started += 1;
+          context.playedBuffers.push(source.buffer);
+          context.playbackRates.push(source.playbackRate.value);
+        }
+      };
+      return source;
+    },
     createGain: () => ({
       gain: { value: 0 },
       connect: () => undefined
+    }),
+    decodeAudioData: vi.fn(async () => {
+      const channel = new Float32Array(128);
+      return { getChannelData: () => channel };
     }),
     resume: vi.fn(async () => { context.state = "running"; }),
     close: vi.fn(async () => { context.state = "closed"; })
@@ -89,6 +106,37 @@ describe("typing key sounds", () => {
 
     expect(context.started).toBe(15);
     expect(context.createdBuffers).toBe(7);
+  });
+
+  it("uses the bundled recording with subtle key and backspace pitch variation", async () => {
+    const context = createFakeContext();
+    const loader = vi.fn(async () => new ArrayBuffer(32));
+    const player = new KeySoundPlayer(() => context, loader);
+
+    player.setEnabled(true);
+    await expect(player.preload()).resolves.toBe(true);
+    player.play("key");
+    player.play("backspace");
+
+    expect(loader).toHaveBeenCalledOnce();
+    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+    expect(context.createdBuffers).toBe(0);
+    expect(context.playedBuffers[0]).toBe(context.playedBuffers[1]);
+    expect(context.playbackRates).toEqual([0.97, 0.82]);
+  });
+
+  it("falls back to synthesized audio when the recording cannot be loaded", async () => {
+    const context = createFakeContext();
+    const loader = vi.fn(async () => { throw new Error("missing sample"); });
+    const player = new KeySoundPlayer(() => context, loader);
+
+    player.setEnabled(true);
+    await expect(player.preload()).resolves.toBe(false);
+    player.play("key");
+
+    expect(context.started).toBe(1);
+    expect(context.createdBuffers).toBe(1);
+    expect(context.playbackRates).toEqual([1]);
   });
 
   it("resumes a suspended context and closes it on dispose", async () => {

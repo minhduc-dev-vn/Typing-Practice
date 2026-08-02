@@ -6,6 +6,7 @@ import { AuthControls } from "@/components/AuthControls";
 import { DailyPracticeBanner } from "@/components/DailyPracticeBanner";
 import { GeneratePanel, type GeneratedContentMetadata } from "@/components/GeneratePanel";
 import { ResultScreen } from "@/components/ResultScreen";
+import { VirtualKeyboard } from "@/components/VirtualKeyboard";
 import { KeySoundPlayer } from "@/lib/audio/key-sound";
 import { createGeneratedPracticeText, createPracticeText } from "@/lib/content";
 import { savePracticeSession } from "@/lib/history/client";
@@ -437,6 +438,8 @@ export function TypingScreen() {
             </span>
           ))}
         </div>
+
+        <VirtualKeyboard />
 
         <div className="practice-footer">
           <span className="keyboard-hint"><kbd>Tab</kbd> focus</span>

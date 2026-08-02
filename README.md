@@ -8,6 +8,8 @@ Phase 4 hoàn tất roadmap hiện tại: engine luyện gõ chạy hoàn toàn 
 
 Âm thanh gõ phím là tùy chọn cục bộ: bật nút `Muted` trên header để nghe mẫu thu bàn phím cơ được đóng gói cùng ứng dụng. Tốc độ phát thay đổi nhẹ giữa các lần gõ và được hạ thấp cho Backspace để tránh cảm giác lặp máy móc. Nếu trình duyệt không tải hoặc giải mã được MP3, ứng dụng tự chuyển sang âm tổng hợp cục bộ. Lựa chọn được lưu trong `localStorage`, không tải audio từ dịch vụ bên ngoài và không tham gia vào vòng lặp của typing engine.
 
+Bàn phím ảo dạng compact hiển thị trạng thái nhấn/nhả theo `KeyboardEvent.code`, hỗ trợ nhiều phím được giữ cùng lúc và tự xóa trạng thái khi cửa sổ mất focus. Hiệu ứng được cập nhật trực tiếp trên component riêng nên không làm màn hình luyện gõ re-render theo từng phím.
+
 ## Chạy local
 
 ```bash

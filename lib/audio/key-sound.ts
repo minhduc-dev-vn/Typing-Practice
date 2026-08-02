@@ -28,7 +28,11 @@ export interface KeySoundAudioContext {
 
 export type KeySoundAudioContextFactory = () => KeySoundAudioContext;
 
-const OUTPUT_VOLUME = 0.18;
+const OUTPUT_VOLUME = 0.22;
+const VARIANT_COUNTS: Record<KeySoundKind, number> = {
+  key: 7,
+  backspace: 4
+};
 
 function defaultContextFactory(): KeySoundAudioContext {
   const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext };
@@ -50,26 +54,91 @@ function nextNoise(seed: number): { seed: number; value: number } {
   };
 }
 
-export function synthesizeKeySound(kind: KeySoundKind, sampleRate: number): Float32Array {
-  const durationSeconds = kind === "backspace" ? 0.045 : 0.026;
-  const frequency = kind === "backspace" ? 170 : 520;
-  const length = Math.max(1, Math.round(sampleRate * durationSeconds));
-  const samples = new Float32Array(length);
-  let seed = kind === "backspace" ? 0x5f37_59df : 0x13ab_91c7;
+function impactEnvelope(time: number, offset: number, decay: number): number {
+  return time < offset ? 0 : Math.exp(-(time - offset) * decay);
+}
 
-  for (let index = 0; index < length; index += 1) {
-    const progress = index / length;
-    const envelope = Math.pow(1 - progress, kind === "backspace" ? 4 : 7);
-    const noise = nextNoise(seed);
-    seed = noise.seed;
-    const tone = Math.sin(2 * Math.PI * frequency * (index / sampleRate));
-    const mixed = kind === "backspace"
-      ? tone * 0.55 + noise.value * 0.28
-      : tone * 0.24 + noise.value * 0.7;
-    samples[index] = Math.max(-1, Math.min(1, mixed * envelope));
+function normalizeSamples(samples: Float32Array, targetPeak: number): Float32Array {
+  let peak = 0;
+  for (const sample of samples) {
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  if (peak === 0) {
+    return samples;
   }
 
+  const scale = targetPeak / peak;
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] *= scale;
+  }
   return samples;
+}
+
+export function synthesizeKeySound(
+  kind: KeySoundKind,
+  sampleRate: number,
+  variant = 0
+): Float32Array {
+  const durationSeconds = kind === "backspace" ? 0.098 : 0.072;
+  const length = Math.max(1, Math.round(sampleRate * durationSeconds));
+  const samples = new Float32Array(length);
+  const normalizedVariant = Math.abs(Math.trunc(variant)) % VARIANT_COUNTS[kind];
+  const pitchOffsets = [-0.031, 0.017, -0.008, 0.029, -0.021, 0.007, 0.038];
+  const pitch = 1 + pitchOffsets[normalizedVariant];
+  const reboundOffset = (kind === "backspace" ? 0.035 : 0.027) + normalizedVariant * 0.00035;
+  let seed = (kind === "backspace" ? 0x5f37_59df : 0x13ab_91c7) ^ (normalizedVariant * 0x45d9_f3b);
+  let previousNoise = 0;
+  let lowNoise = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    const time = index / sampleRate;
+    const noise = nextNoise(seed);
+    seed = noise.seed;
+    const brightNoise = noise.value - previousNoise * 0.82;
+    previousNoise = noise.value;
+    lowNoise += (noise.value - lowNoise) * 0.16;
+
+    const switchClick = impactEnvelope(time, 0, kind === "backspace" ? 420 : 560);
+    const bottomOut = impactEnvelope(time, kind === "backspace" ? 0.0048 : 0.0034, kind === "backspace" ? 78 : 96);
+    const rebound = impactEnvelope(time, reboundOffset, kind === "backspace" ? 230 : 285);
+    const plasticClick = (
+      Math.sin(2 * Math.PI * 2_150 * pitch * time) * 0.24 +
+      Math.sin(2 * Math.PI * 3_650 * pitch * time + 0.4) * 0.13 +
+      brightNoise * 0.31
+    ) * switchClick;
+
+    const caseResonance = kind === "backspace"
+      ? (
+          Math.sin(2 * Math.PI * 118 * pitch * time + 0.3) * 0.34 +
+          Math.sin(2 * Math.PI * 236 * pitch * time) * 0.25 +
+          Math.sin(2 * Math.PI * 418 * pitch * time + 0.8) * 0.13 +
+          lowNoise * 0.2
+        ) * bottomOut
+      : (
+          Math.sin(2 * Math.PI * 168 * pitch * time + 0.2) * 0.26 +
+          Math.sin(2 * Math.PI * 337 * pitch * time) * 0.2 +
+          Math.sin(2 * Math.PI * 618 * pitch * time + 0.7) * 0.12 +
+          lowNoise * 0.14
+        ) * bottomOut;
+
+    const stabilizerRattle = kind === "backspace"
+      ? (
+          Math.sin(2 * Math.PI * 1_260 * pitch * time + noise.value * 0.5) * 0.1 +
+          brightNoise * 0.075
+        ) * impactEnvelope(time, 0.006, 112)
+      : 0;
+
+    const returnTap = (
+      Math.sin(2 * Math.PI * (kind === "backspace" ? 720 : 1_080) * pitch * time) * 0.075 +
+      brightNoise * 0.045
+    ) * rebound;
+
+    const remaining = durationSeconds - time;
+    const endFade = Math.min(1, Math.max(0, remaining / 0.012));
+    samples[index] = (plasticClick + caseResonance + stabilizerRattle + returnTap) * endFade * endFade;
+  }
+
+  return normalizeSamples(samples, kind === "backspace" ? 0.86 : 0.8);
 }
 
 export class KeySoundPlayer {
@@ -77,7 +146,8 @@ export class KeySoundPlayer {
   private disposed = false;
   private context: KeySoundAudioContext | null = null;
   private output: GainPort | null = null;
-  private buffers: Partial<Record<KeySoundKind, AudioBufferPort>> = {};
+  private buffers: Partial<Record<KeySoundKind, Array<AudioBufferPort | undefined>>> = {};
+  private variantCursors: Record<KeySoundKind, number> = { key: 0, backspace: 0 };
 
   constructor(private readonly contextFactory: KeySoundAudioContextFactory = defaultContextFactory) {}
 
@@ -135,15 +205,20 @@ export class KeySoundPlayer {
   }
 
   private getBuffer(context: KeySoundAudioContext, kind: KeySoundKind): AudioBufferPort {
-    const cached = this.buffers[kind];
+    const variantCount = VARIANT_COUNTS[kind];
+    const variant = this.variantCursors[kind];
+    this.variantCursors[kind] = (variant + 3) % variantCount;
+    const pool = this.buffers[kind] ?? [];
+    this.buffers[kind] = pool;
+    const cached = pool[variant];
     if (cached) {
       return cached;
     }
 
-    const samples = synthesizeKeySound(kind, context.sampleRate);
+    const samples = synthesizeKeySound(kind, context.sampleRate, variant);
     const buffer = context.createBuffer(1, samples.length, context.sampleRate);
     buffer.getChannelData(0).set(samples);
-    this.buffers[kind] = buffer;
+    pool[variant] = buffer;
     return buffer;
   }
 

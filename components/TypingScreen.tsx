@@ -6,6 +6,7 @@ import { AuthControls } from "@/components/AuthControls";
 import { DailyPracticeBanner } from "@/components/DailyPracticeBanner";
 import { GeneratePanel, type GeneratedContentMetadata } from "@/components/GeneratePanel";
 import { ResultScreen } from "@/components/ResultScreen";
+import { KeySoundPlayer } from "@/lib/audio/key-sound";
 import { createGeneratedPracticeText, createPracticeText } from "@/lib/content";
 import { savePracticeSession } from "@/lib/history/client";
 import { CountdownTimer } from "@/lib/typing-engine/countdown";
@@ -44,6 +45,7 @@ export function TypingScreen() {
   const [sessionSeed, setSessionSeed] = useState(1);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(timeLimit);
   const [theme, setTheme] = useState<Theme>("dark");
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [inputMethod, setInputMethod] = useState<VietnameseInputMethod>("telex");
   const [generatedText, setGeneratedText] = useState<string | null>(null);
   const [currentTopic, setCurrentTopic] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function TypingScreen() {
   const timerRef = useRef<CountdownTimer | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const composerRef = useRef(new VietnameseComposer(inputMethod));
+  const keySoundRef = useRef<KeySoundPlayer | null>(null);
   const historySaveTokenRef = useRef(0);
 
   const targetText = useMemo(
@@ -143,6 +146,20 @@ export function TypingScreen() {
     return () => cancelAnimationFrame(themeFrame);
   }, []);
 
+  useEffect(() => {
+    const player = new KeySoundPlayer();
+    const enabled = window.localStorage.getItem("typing-sound-enabled") === "true";
+    player.setEnabled(enabled);
+    keySoundRef.current = player;
+    const preferenceFrame = requestAnimationFrame(() => setSoundEnabled(enabled));
+
+    return () => {
+      cancelAnimationFrame(preferenceFrame);
+      keySoundRef.current = null;
+      player.dispose();
+    };
+  }, []);
+
   const applyCompositionChange = useCallback((change: CompositionChange) => {
     const engine = engineRef.current;
     if (!engine) {
@@ -199,6 +216,7 @@ export function TypingScreen() {
     }
 
     event.preventDefault();
+    keySoundRef.current?.play(event.key === "Backspace" ? "backspace" : "key");
     if (completed) {
       const elapsedMs = startedAtRef.current === null
         ? 0
@@ -280,10 +298,22 @@ export function TypingScreen() {
     window.localStorage.setItem("typing-theme", nextTheme);
   };
 
+  const toggleSound = () => {
+    const nextEnabled = !soundEnabled;
+    setSoundEnabled(nextEnabled);
+    keySoundRef.current?.setEnabled(nextEnabled);
+    window.localStorage.setItem("typing-sound-enabled", String(nextEnabled));
+  };
+
   if (finalResult) {
     return (
       <main className="app-shell">
-        <Header theme={theme} onToggleTheme={toggleTheme} />
+        <Header
+          theme={theme}
+          soundEnabled={soundEnabled}
+          onToggleTheme={toggleTheme}
+          onToggleSound={toggleSound}
+        />
         <ResultScreen
           result={finalResult}
           onRestart={prepareNewSession}
@@ -296,7 +326,12 @@ export function TypingScreen() {
 
   return (
     <main className="app-shell">
-      <Header theme={theme} onToggleTheme={toggleTheme} />
+      <Header
+        theme={theme}
+        soundEnabled={soundEnabled}
+        onToggleTheme={toggleTheme}
+        onToggleSound={toggleSound}
+      />
 
       <DailyPracticeBanner onUseTopic={handleUseSuggestedTopic} />
 
@@ -415,7 +450,14 @@ export function TypingScreen() {
   );
 }
 
-function Header({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
+interface HeaderProps {
+  theme: Theme;
+  soundEnabled: boolean;
+  onToggleTheme: () => void;
+  onToggleSound: () => void;
+}
+
+function Header({ theme, soundEnabled, onToggleTheme, onToggleSound }: HeaderProps) {
   return (
     <header className="site-header">
       <a className="brand" href="#practice-heading" aria-label="Keysteady home">
@@ -424,6 +466,15 @@ function Header({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => v
       </a>
       <div className="header-actions">
         <AuthControls />
+        <button
+          className="sound-button"
+          type="button"
+          aria-pressed={soundEnabled}
+          onClick={onToggleSound}
+        >
+          <span aria-hidden="true">{soundEnabled ? "♪" : "♩"}</span>
+          {soundEnabled ? "Sound" : "Muted"}
+        </button>
         <button className="theme-button" type="button" onClick={onToggleTheme}>
           <span aria-hidden="true">{theme === "dark" ? "☼" : "☾"}</span>
           {theme === "dark" ? "Light" : "Dark"}

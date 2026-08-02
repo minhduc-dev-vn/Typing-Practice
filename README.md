@@ -6,6 +6,8 @@
 
 Phase 4 hoàn tất roadmap hiện tại: engine luyện gõ chạy hoàn toàn ở client, nội dung tĩnh và AI, tài khoản Supabase email/password tùy chọn, lịch sử/dashboard và gợi ý Daily Practice theo lịch sử 7 ngày. Guest vẫn luyện gõ và generate bình thường; banner cá nhân hóa chỉ được tải sau khi xác thực tài khoản.
 
+Âm thanh gõ phím là tùy chọn cục bộ: bật nút `Muted` trên header để nghe click tổng hợp độ trễ thấp. Lựa chọn được lưu trong `localStorage`; tính năng không tải audio bên ngoài và không tham gia vào vòng lặp của typing engine.
+
 ## Chạy local
 
 ```bash

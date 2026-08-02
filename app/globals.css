@@ -148,6 +148,7 @@ button {
   box-shadow: 0 7px 18px var(--accent-soft);
 }
 
+.sound-button,
 .theme-button,
 .text-button {
   border: 0;
@@ -156,6 +157,7 @@ button {
   background: transparent;
 }
 
+.sound-button,
 .theme-button {
   display: inline-flex;
   gap: 8px;
@@ -166,9 +168,16 @@ button {
   font-size: 13px;
 }
 
+.sound-button:hover,
 .theme-button:hover,
 .text-button:hover {
   color: var(--text);
+}
+
+.sound-button[aria-pressed="true"] {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--accent-soft);
 }
 
 .daily-practice-banner {

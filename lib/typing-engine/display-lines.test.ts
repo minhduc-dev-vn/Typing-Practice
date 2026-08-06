@@ -33,6 +33,14 @@ describe("typing display lines", () => {
     expect(() => splitTypingDisplayLines("text", 0)).toThrow("positive integer");
   });
 
+  it("moves a whole word to the next line even when the preceding line is short", () => {
+    const text = "a abcdefgh";
+    const lines = splitTypingDisplayLines(text, 6);
+
+    expect(lines.map(({ start, end }) => Array.from(text).slice(start, end).join("")))
+      .toEqual(["a ", "abcdef", "gh"]);
+  });
+
   it("moves forward and backward at exact line boundaries", () => {
     const lines = splitTypingDisplayLines("one two three", 8);
 

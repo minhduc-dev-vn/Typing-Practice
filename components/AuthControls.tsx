@@ -102,7 +102,7 @@ function AuthDialog({ onClose }: { onClose: () => void }) {
         <button className="dialog-close" type="button" onClick={onClose} aria-label="Close sign in dialog">×</button>
         <p className="eyebrow">Optional account</p>
         <h2 id="auth-heading">{mode === "sign-in" ? "Welcome back." : "Save your progress."}</h2>
-        <p className="auth-copy">Typing and AI generation remain available without an account.</p>
+        <p className="auth-copy">Typing practice remains available without an account.</p>
 
         <div className="auth-tabs">
           <button className={mode === "sign-in" ? "active" : ""} type="button" onClick={() => switchMode("sign-in")}>Sign in</button>

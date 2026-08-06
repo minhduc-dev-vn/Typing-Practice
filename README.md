@@ -1,14 +1,19 @@
-# AI Typing Practice
+# Keysteady Typing Practice
 
-Ứng dụng luyện gõ desktop cho English và Tiếng Việt, xây dựng bằng Next.js App Router.
+Ứng dụng luyện gõ desktop cho English và Tiếng Việt, xây dựng bằng Next.js App Router. Nội dung luyện tập được lấy hoàn toàn từ dữ liệu tĩnh đóng gói cùng ứng dụng; ứng dụng không gọi dịch vụ AI.
 
-## Phase hiện tại
+## Tính năng chính
 
-Phase 4 hoàn tất roadmap hiện tại: engine luyện gõ chạy hoàn toàn ở client, nội dung tĩnh và AI, tài khoản Supabase email/password tùy chọn, lịch sử/dashboard và gợi ý Daily Practice theo lịch sử 7 ngày. Guest vẫn luyện gõ và generate bình thường; banner cá nhân hóa chỉ được tải sau khi xác thực tài khoản.
-
-Âm thanh gõ phím là tùy chọn cục bộ: bật nút `Muted` trên header để nghe mẫu thu bàn phím cơ được đóng gói cùng ứng dụng. Tốc độ phát thay đổi nhẹ giữa các lần gõ và được hạ thấp cho Backspace để tránh cảm giác lặp máy móc. Nếu trình duyệt không tải hoặc giải mã được MP3, ứng dụng tự chuyển sang âm tổng hợp cục bộ. Lựa chọn được lưu trong `localStorage`, không tải audio từ dịch vụ bên ngoài và không tham gia vào vòng lặp của typing engine.
-
-Bài luyện chỉ hiển thị dòng hiện tại và một dòng xem trước mờ bên dưới; khi con trỏ đi qua ranh giới từ, hai dòng chuyển vị trí bằng animation ngắn và Backspace có thể quay lại dòng trước. Bàn phím ảo compact được thu nhỏ để cùng nằm trong viewport, hiển thị trạng thái nhấn/nhả theo `KeyboardEvent.code`, hỗ trợ nhiều phím được giữ cùng lúc và tự xóa trạng thái khi cửa sổ mất focus. Các hiệu ứng cập nhật trực tiếp trên DOM nên không làm màn hình luyện gõ re-render theo từng phím.
+- Hai mode `Words` và `Paragraph`.
+- Thời gian chọn nhanh 15, 30, 60 giây hoặc tùy chỉnh từ 10 đến 3600 giây.
+- Nội dung tự quay vòng cho đến khi hết giờ và giữ số liệu chính xác qua nhiều vòng.
+- Chỉ hiển thị dòng hiện tại cùng dòng xem trước; số cột tự thích ứng với chiều rộng thực tế.
+- Space xác nhận từ sau khi đã nhập ít nhất một ký tự; Space lặp lại ở đầu từ mới bị bỏ qua.
+- Ký tự thừa hiển thị đỏ và được tính lỗi nhưng không đi vào từ tiếp theo.
+- Backspace không thể quay lại từ đã xác nhận; ArrowRight bỏ qua phần còn thiếu của từ hiện tại.
+- Hỗ trợ input method của hệ điều hành, bao gồm Vietnamese Telex trên Windows, qua IME composition real-time.
+- Bàn phím ảo và âm thanh bàn phím cơ tùy chọn.
+- Tài khoản Supabase, lịch sử và dashboard là tùy chọn; guest vẫn luyện tập bình thường.
 
 ## Chạy local
 
@@ -19,25 +24,15 @@ npm run dev
 
 Mở `http://localhost:3000` trên máy desktop có bàn phím vật lý.
 
-## Cấu hình Supabase và AI
+## Cấu hình Supabase tùy chọn
 
-1. Tạo Supabase project free tier.
-2. Chạy lần lượt ba migration:
-   - [`supabase/migrations/20260801_phase_2_ai_content.sql`](supabase/migrations/20260801_phase_2_ai_content.sql)
-   - [`supabase/migrations/20260802_phase_3_user_experience.sql`](supabase/migrations/20260802_phase_3_user_experience.sql)
-   - [`supabase/migrations/20260803_phase_4_personalization.sql`](supabase/migrations/20260803_phase_4_personalization.sql)
+1. Tạo Supabase project.
+2. Chạy migration [`supabase/migrations/20260802_phase_3_user_experience.sql`](supabase/migrations/20260802_phase_3_user_experience.sql).
 3. Sao chép `.env.example` thành `.env.local`.
-4. Điền Supabase URL, anon key, service-role key và thông tin OpenAI-compatible provider. `OPENAI_API_BASE_URL` nên kết thúc ở API version, ví dụ `https://api.openai.com/v1`.
+4. Điền `NEXT_PUBLIC_SUPABASE_URL` và `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+5. Bật phương thức đăng nhập email/password trong Supabase Auth.
 
-`SUPABASE_SERVICE_ROLE_KEY` chỉ được đọc trong API route phía server. Không đặt key này trong biến có tiền tố `NEXT_PUBLIC_`.
-
-Khi thiếu cấu hình hoặc provider gặp lỗi, `/api/generate` trả nội dung tĩnh cùng thông báo fallback để phiên luyện không bị treo.
-
-Supabase Auth cần bật email/password. Tùy cấu hình project, người dùng có thể phải xác nhận email trước khi đăng nhập. Hai bảng Phase 3 bật RLS và chỉ cho session `authenticated` đọc/ghi row có `user_id = auth.uid()`.
-
-Cache `topic_suggestions` của Phase 4 dùng chung giữa các tài khoản nhưng chỉ API server với service-role key được truy cập. Mỗi topic xuất hiện ít nhất 3 lần trong lịch sử 7 ngày được xem là quen thuộc. Gợi ý liên quan được gọi AI một lần rồi cache; nếu chưa đủ lịch sử hoặc AI lỗi, ứng dụng dùng danh sách chủ đề mặc định tĩnh. Trình duyệt giữ một bản sao gợi ý theo `userId + ngày UTC` trong `localStorage` để không tính lại mỗi lần tải trang.
-
-Schema Phase 3 không lưu nguyên văn bài tĩnh hoặc cặp `difficulty/length` của bài AI. Vì vậy dashboard hiển thị lịch sử và topic nhưng không giả lập tính năng luyện lại chính xác khi thiếu dữ liệu.
+Các migration AI và personalization cũ được giữ trong repository để bảo toàn lịch sử database đã triển khai, nhưng không còn được runtime sử dụng. Không cần xóa các bảng cũ trên Supabase.
 
 ## Kiểm tra
 

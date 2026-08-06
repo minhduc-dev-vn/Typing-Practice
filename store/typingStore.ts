@@ -2,8 +2,27 @@ import { create } from "zustand";
 
 import type { TypingLanguage, TypingResult } from "@/lib/typing-engine/engine";
 
-export type PracticeMode = "words" | "sentences" | "paragraph";
-export type TimeLimit = 30 | 60 | 120;
+export type PracticeMode = "words" | "paragraph" | "custom";
+export type TimeLimit = number;
+export const MIN_TIME_LIMIT_SECONDS = 10;
+export const MAX_TIME_LIMIT_SECONDS = 3_600;
+
+export function parseTimeLimit(value: string): TimeLimit | null {
+  if (value.trim() === "") {
+    return null;
+  }
+
+  const parsedTime = Number(value);
+  if (
+    !Number.isFinite(parsedTime)
+    || parsedTime < MIN_TIME_LIMIT_SECONDS
+    || parsedTime > MAX_TIME_LIMIT_SECONDS
+  ) {
+    return null;
+  }
+
+  return Math.round(parsedTime);
+}
 
 interface TypingState {
   mode: PracticeMode;

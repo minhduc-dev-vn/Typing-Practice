@@ -1,10 +1,12 @@
 import type { TypingLanguage, TypingResult } from "@/lib/typing-engine/engine";
 import type { PracticeMode } from "@/store/typingStore";
 
+export type HistoricalPracticeMode = PracticeMode | "sentences";
+
 export interface PracticeHistoryRow {
   id: string;
   user_id: string;
-  mode: PracticeMode;
+  mode: HistoricalPracticeMode;
   language: TypingLanguage;
   topic: string | null;
   wpm: number;
@@ -12,13 +14,6 @@ export interface PracticeHistoryRow {
   cpm: number;
   errors: number;
   duration_seconds: number;
-  created_at: string;
-}
-
-export interface FavoriteTopicRow {
-  id: string;
-  user_id: string;
-  topic: string;
   created_at: string;
 }
 

@@ -6,7 +6,7 @@ describe("practice history persistence payload", () => {
   it("maps a completed session to the Phase 3 schema", () => {
     expect(createHistoryInsert({
       userId: "11111111-1111-4111-8111-111111111111",
-      mode: "sentences",
+      mode: "paragraph",
       language: "vi",
       topic: "khu vườn",
       result: {
@@ -22,7 +22,7 @@ describe("practice history persistence payload", () => {
       }
     })).toEqual({
       user_id: "11111111-1111-4111-8111-111111111111",
-      mode: "sentences",
+      mode: "paragraph",
       language: "vi",
       topic: "khu vườn",
       wpm: 42.5,
@@ -31,5 +31,28 @@ describe("practice history persistence payload", () => {
       errors: 1,
       duration_seconds: 60
     });
+  });
+
+  it("keeps the custom mode in the saved history payload", () => {
+    const payload = createHistoryInsert({
+      userId: "11111111-1111-4111-8111-111111111111",
+      mode: "custom",
+      language: "en",
+      topic: null,
+      result: {
+        wpm: 35,
+        cpm: 175,
+        accuracy: 96,
+        errors: 2,
+        correctCharacters: 95,
+        typedCharacters: 99,
+        correctSyllables: 20,
+        durationSeconds: 30,
+        maxLatencyMs: 0.1
+      }
+    });
+
+    expect(payload.mode).toBe("custom");
+    expect(payload.topic).toBeNull();
   });
 });

@@ -3,8 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateHistory,
   calculateHistorySummary,
-  formatDuration,
-  getRecentTopics
+  formatDuration
 } from "./analytics";
 import type { PracticeHistoryRow } from "./types";
 
@@ -56,7 +55,4 @@ describe("history analytics", () => {
     ]);
   });
 
-  it("returns distinct recent topics in source order", () => {
-    expect(getRecentTopics(rows)).toEqual(["Gardens", "Travel"]);
-  });
 });

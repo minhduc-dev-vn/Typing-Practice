@@ -65,24 +65,6 @@ export function aggregateHistory(
     }));
 }
 
-export function getRecentTopics(rows: readonly PracticeHistoryRow[], limit = 8): string[] {
-  const topics = new Map<string, string>();
-  for (const row of rows) {
-    const topic = row.topic?.trim();
-    if (!topic) {
-      continue;
-    }
-    const key = topic.toLocaleLowerCase("en-US");
-    if (!topics.has(key)) {
-      topics.set(key, topic);
-    }
-    if (topics.size >= limit) {
-      break;
-    }
-  }
-  return [...topics.values()];
-}
-
 export function formatDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);

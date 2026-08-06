@@ -25,11 +25,9 @@ function findExplicitBreak(
 function findWordBreak(
   characters: readonly string[],
   start: number,
-  limit: number,
-  maxColumns: number
+  limit: number
 ): number | null {
-  const minimumLength = Math.max(1, Math.floor(maxColumns * 0.5));
-  for (let index = limit - 1; index >= start + minimumLength; index -= 1) {
+  for (let index = limit - 1; index >= start; index -= 1) {
     if (characters[index] === " " || characters[index] === "\t") {
       return index + 1;
     }
@@ -55,7 +53,7 @@ export function splitTypingDisplayLines(
     let end = explicitBreak ?? limit;
 
     if (explicitBreak === null && limit < characters.length) {
-      end = findWordBreak(characters, start, limit, maxColumns) ?? limit;
+      end = findWordBreak(characters, start, limit) ?? limit;
     }
 
     lines.push({ start, end });
